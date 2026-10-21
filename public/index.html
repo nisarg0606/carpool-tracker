@@ -4,38 +4,132 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Carpool Tracker</title>
+<script>(function(){try{var t=localStorage.getItem("carpool-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="light";}})();</script>
 <style>
-  :root{--bg:#f6f7f9;--card:#fff;--text:#17202a;--muted:#68707c;--line:#e3e6ea;--accent:#2563eb;--accent2:#0ea5a4;--danger:#dc2626;--ok:#15803d;--radius:14px}
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
-  header{background:#111827;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5}
+  /* ============ Phase 2 skin: liquid, premium, light + dark ============
+     Data/logic unchanged. Theme is a per-device preference only:
+     localStorage["carpool-theme"], set early by the script in <head>.   */
+  :root{
+    color-scheme:light;
+    --bg1:#dfe7f3; --bg2:#f4f6fa; --glow1:rgba(37,99,235,.14); --glow2:rgba(14,165,164,.12);
+    --card:rgba(255,255,255,.88); --card-solid:#ffffff;
+    --text:#182230; --muted:#5b6572; --line:rgba(24,34,48,.13);
+    --accent:#1d4ed8; --on-accent:#ffffff; --accent2:#0f766e; --on-accent2:#ffffff; --accent-soft:#e3ebfd;
+    --danger:#b42318; --ok:#166534;
+    --input-bg:rgba(255,255,255,.92);
+    --header-bg:rgba(22,33,58,.92); --header-text:#ffffff;
+    --warn-bg:#fde68a; --info-bg:#dbeafe;
+    --shadow:0 10px 30px rgba(23,35,64,.10),0 2px 6px rgba(23,35,64,.06);
+    --radius:18px;
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg1:#0a1120; --bg2:#0d1626; --glow1:rgba(59,110,246,.20); --glow2:rgba(45,212,191,.10);
+    --card:rgba(20,31,49,.92); --card-solid:#141f31;
+    --text:#edf2f8; --muted:#a9b7c6; --line:rgba(237,242,248,.14);
+    --accent:#7aa7ff; --on-accent:#0a1526; --accent2:#2dd4bf; --on-accent2:#06231f; --accent-soft:#1c2c46;
+    --danger:#fda4af; --ok:#4ade80;
+    --input-bg:rgba(10,21,38,.65);
+    --header-bg:rgba(10,17,32,.88); --header-text:#ffffff;
+    --warn-bg:#453208; --info-bg:#16283f;
+    --shadow:0 12px 32px rgba(0,0,0,.42),0 2px 8px rgba(0,0,0,.30);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:ui-rounded,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);line-height:1.45;-webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(720px 420px at 12% -6%,var(--glow1),transparent 62%),
+      radial-gradient(680px 460px at 96% 8%,var(--glow2),transparent 60%),
+      linear-gradient(165deg,var(--bg1),var(--bg2) 58%);
+    background-attachment:fixed;min-height:100vh;
+    transition:background-color .35s ease,color .35s ease}
+  header{background:var(--header-bg);color:var(--header-text);padding:12px 16px;position:sticky;top:0;z-index:20;
+    -webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);
+    box-shadow:0 6px 24px rgba(5,10,25,.22)}
   header .row{display:flex;justify-content:space-between;align-items:center;max-width:880px;margin:0 auto;gap:10px}
-  header h1{font-size:19px;margin:0} .badge{font-size:12px;padding:4px 9px;border-radius:999px;background:#374151;white-space:nowrap}
-  .badge.shared{background:var(--ok)} .badge.local{background:#b45309}
-  main{max-width:880px;margin:0 auto;padding:14px 12px 40px}
-  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
-  nav.tabs button{flex:1;min-width:80px;padding:10px 6px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-size:15px;cursor:pointer}
-  nav.tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
-  .card h2{margin:0 0 10px;font-size:17px} .card h3{margin:14px 0 8px;font-size:15px}
-  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}
-  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;font-size:16px;background:#fff;color:var(--text)}
-  button.btn{padding:10px 14px;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:15px;cursor:pointer}
-  button.btn.secondary{background:#fff;color:var(--accent)} button.btn.ghost{background:#fff;color:var(--text);border-color:var(--line)}
-  button.btn.danger{background:#fff;color:var(--danger);border-color:var(--danger)} button.small{padding:6px 10px;font-size:13px}
-  .pills{display:flex;flex-wrap:wrap;gap:8px} .pill{padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:15px}
-  .pill.sel{background:var(--accent);color:#fff;border-color:var(--accent)} .pill.sel2{background:var(--accent2);color:#fff;border-color:var(--accent2)}
-  .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-  .check{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:10px;font-size:15px}
-  .check input{width:auto} .muted{color:var(--muted);font-size:13px} .rowflex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .ride,.pay,.person{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:10px 0} .ride:first-of-type,.pay:first-of-type{border-top:none}
-  table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right} th:first-child,td:first-child{text-align:left}
-  .scrollx{overflow-x:auto} .settled{color:var(--ok);font-weight:600} .credit{color:var(--accent2);font-weight:600}
-  .banner{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px} .banner.warn{background:#fef3c7} .banner.info{background:#dbeafe}
-  .hidden{display:none!important} .amount{font-weight:700}
+  header h1{font-size:20px;margin:0;font-weight:750;letter-spacing:-.01em;white-space:nowrap}
+  .head-actions{display:flex;align-items:center;gap:8px}
+  .badge{font-size:12px;font-weight:650;padding:6px 10px;border-radius:999px;background:#3a4a68;color:#fff;white-space:nowrap}
+  .badge.shared{background:var(--ok);color:#fff}
+  :root[data-theme="dark"] .badge.shared{background:#166534;color:#fff}
+  .badge.local{background:#b45309;color:#fff}
+  .theme-toggle{min-height:40px;padding:8px 13px;border-radius:999px;border:1px solid rgba(255,255,255,.38);
+    background:rgba(255,255,255,.14);color:#fff;font-size:13.5px;font-weight:650;cursor:pointer;white-space:nowrap;
+    transition:transform .18s ease,background-color .25s ease,box-shadow .25s ease}
+  .theme-toggle:hover{background:rgba(255,255,255,.24)}
+  .theme-toggle:active{transform:scale(.96)}
+  main{max-width:880px;margin:0 auto;padding:16px 12px 44px}
+  nav.tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:15px;padding:6px;border-radius:16px;
+    background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  nav.tabs button{flex:1;min-width:80px;min-height:48px;padding:10px 6px;border:1px solid transparent;background:transparent;color:var(--text);
+    border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;
+    transition:background-color .25s ease,color .25s ease,transform .16s ease,box-shadow .25s ease}
+  nav.tabs button:hover{background:var(--accent-soft)}
+  nav.tabs button:active{transform:scale(.97)}
+  nav.tabs button.active{background:var(--accent);color:var(--on-accent);box-shadow:0 6px 16px rgba(20,50,120,.28)}
+  section.view-enter{animation:viewIn .38s cubic-bezier(.22,.9,.28,1)}
+  @keyframes viewIn{from{opacity:0;transform:translateY(10px) scale(.996)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:13px;
+    box-shadow:var(--shadow);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    transition:background-color .35s ease,border-color .35s ease}
+  .card h2{margin:0 0 10px;font-size:17.5px;font-weight:720;letter-spacing:-.01em} .card h3{margin:16px 0 8px;font-size:15.5px;font-weight:680}
+  label{display:block;font-size:13.5px;font-weight:600;color:var(--muted);margin:12px 0 6px}
+  input,select,textarea{width:100%;min-height:46px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;font-size:16px;
+    background:var(--input-bg);color:var(--text);transition:border-color .2s ease,box-shadow .2s ease,background-color .35s ease}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3.5px var(--accent-soft)}
+  button{font-family:inherit}
+  button:focus-visible,.pill:focus-visible,.check:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  button.btn{min-height:46px;padding:11px 17px;border-radius:12px;border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);
+    font-size:15px;font-weight:650;cursor:pointer;box-shadow:0 6px 16px rgba(20,50,120,.22);
+    transition:transform .16s ease,box-shadow .25s ease,background-color .25s ease,color .25s ease,border-color .25s ease}
+  button.btn:hover{box-shadow:0 9px 22px rgba(20,50,120,.28)}
+  button.btn:active{transform:scale(.97)}
+  button.btn.secondary{background:var(--card-solid);color:var(--accent);box-shadow:none}
+  button.btn.ghost{background:transparent;color:var(--text);border-color:var(--line);box-shadow:none}
+  button.btn.danger{background:transparent;color:var(--danger);border-color:var(--danger);box-shadow:none}
+  button.small{min-height:40px;padding:7px 12px;font-size:13.5px;border-radius:10px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{min-height:44px;padding:10px 15px;border:1px solid var(--line);border-radius:999px;background:var(--card-solid);color:var(--text);
+    cursor:pointer;font-size:15px;font-weight:600;
+    transition:background-color .22s ease,color .22s ease,border-color .22s ease,transform .15s ease,box-shadow .22s ease}
+  .pill:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .pill:active{transform:scale(.96)}
+  .pill.sel{background:var(--accent);color:var(--on-accent);border-color:var(--accent);box-shadow:0 6px 15px rgba(20,50,120,.26)}
+  .pill.sel2{background:var(--accent2);color:var(--on-accent2);border-color:var(--accent2)}
+  .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
+  .check{display:flex;gap:9px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:15px;
+    min-height:46px;color:var(--text);background:var(--input-bg);cursor:pointer;margin:0;font-weight:550;
+    transition:background-color .22s ease,border-color .22s ease,transform .15s ease}
+  .check:active{transform:scale(.98)}
+  .check:has(input:checked){background:var(--accent-soft);border-color:var(--accent)}
+  .check input{width:19px;height:19px;min-height:0;padding:0;flex:none;accent-color:var(--accent)}
+  .muted{color:var(--muted);font-size:13.5px}
+  .rowflex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .ride,.pay,.person{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:12px 0;align-items:flex-start}
+  .ride:first-of-type,.pay:first-of-type{border-top:none}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:right}
+  th{color:var(--muted);font-weight:650} th:first-child,td:first-child{text-align:left}
+  .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .settled{color:var(--ok);font-weight:700} .credit{color:var(--accent2);font-weight:700}
+  :root[data-theme="dark"] .credit{color:var(--accent2)}
+  .banner{border-radius:13px;padding:11px 13px;margin-bottom:12px;font-size:14px;color:var(--text)}
+  .banner.warn{background:var(--warn-bg)} .banner.info{background:var(--info-bg)}
+  .hidden{display:none!important} .amount{font-weight:750}
+  @media (max-width:560px){
+    header h1{font-size:18px} main{padding:13px 10px 40px} .card{padding:14px}
+    nav.tabs button{min-width:72px;font-size:14px}
+    .ride,.pay,.person{flex-wrap:wrap}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+    html{scroll-behavior:auto}
+  }
 </style>
 </head>
 <body>
-<header><div class="row"><h1>🚗 Carpool Tracker</h1><span id="modeBadge" class="badge">Connecting…</span></div></header>
+<header><div class="row"><h1>🚗 Carpool Tracker</h1><div class="head-actions"><span id="modeBadge" class="badge">Connecting…</span><button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle light or dark theme" aria-pressed="false">🌙 Dark</button></div></div></header>
 <main>
   <div id="notice"></div>
   <nav class="tabs">
@@ -119,6 +213,11 @@ const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + St
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/* ===== theme (per-device preference ONLY; never app data) ===== */
+const THEME_KEY = "carpool-theme";
+function applyTheme(t) { document.documentElement.dataset.theme = t; const b = $("themeToggle"); if (b) { const dark = t === "dark"; b.setAttribute("aria-pressed", String(dark)); b.textContent = dark ? "☀️ Light" : "🌙 Dark"; } }
+function initTheme() { let t = document.documentElement.dataset.theme; if (t !== "light" && t !== "dark") { try { t = localStorage.getItem(THEME_KEY); } catch (e) {} if (t !== "light" && t !== "dark") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; } applyTheme(t); }
 
 /* ================= local fallback store (NOT shared mode) =================
    Used ONLY when /api is unreachable — e.g. this file opened as a plain file
@@ -293,7 +392,7 @@ function renderSettings() {
   $("rateInput").value = (state.settings.rateCents / 100).toFixed(2);
   $("officeDayChecks").innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<label class="check"><input type="checkbox" class="officeDay" value="${d}" ${state.settings.officeDays.includes(d) ? "checked" : ""}> ${WEEKDAYS_SHORT[d]}</label>`).join("");
 }
-function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab)); ["log", "balances", "history", "settings"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab)); }
+function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab)); ["log", "balances", "history", "settings"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab)); const el = $("tab-" + tab); if (el) { el.classList.remove("view-enter"); void el.offsetWidth; el.classList.add("view-enter"); } }
 
 /* ================================= events ================================ */
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
@@ -320,6 +419,8 @@ $("cancelEditPay").onclick = () => { editingPaymentId = null; $("payTitle").text
 $("addPerson").onclick = async () => { const name = $("newPersonName").value.trim(); if (!name) return alert("Enter a name."); try { await api.addPerson({ name, canDrive: $("newPersonDrive").checked }); $("newPersonName").value = ""; $("newPersonDrive").checked = false; await refresh(); } catch (e) { alert(e.message); } };
 $("saveSettings").onclick = async () => { const v = { rateCents: Math.round(Number($("rateInput").value) * 100), officeDays: [...document.querySelectorAll(".officeDay")].filter(c => c.checked).map(c => Number(c.value)) }; if (!(v.rateCents >= 0)) return alert("Enter a valid rate."); try { await api.saveSettings(v); await refresh(); notice("Settings saved."); } catch (e) { alert(e.message); } };
 $("setCode").onclick = async () => { const code = prompt("Group code for this device (must match the GROUP_CODE set on the server; leave blank if none is set):", groupCode()); if (code === null) return; try { localStorage.setItem("carpool-group-code", code.trim()); } catch (e) {} await boot(); };
+$("themeToggle").onclick = () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; try { localStorage.setItem(THEME_KEY, next); } catch (e) {} applyTheme(next); };
+initTheme();
 
 /* ================================== boot ================================= */
 async function boot() {
