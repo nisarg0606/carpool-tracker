@@ -150,6 +150,28 @@
   .datewrap{position:relative}
   .date-display{display:flex;align-items:center;min-height:46px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--input-bg);color:var(--text);font-size:16px;pointer-events:none;white-space:nowrap;overflow:hidden}
   .datewrap input[type="date"]{position:absolute;inset:0;width:100%;height:100%;min-height:0;padding:0;border:none;opacity:.001}
+
+  /* ===== compact date button + premium calendar popover ===== */
+  .datepicker{position:relative;display:inline-block;max-width:100%}
+  .date-btn{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:9px 14px;border:1px solid var(--line);border-radius:12px;background:var(--input-bg);color:var(--text);font-size:15px;font-weight:650;cursor:pointer;box-shadow:0 3px 10px rgba(20,40,90,.08);transition:border-color .2s ease,box-shadow .2s ease,transform .15s ease}
+  .date-btn:hover{border-color:var(--accent);box-shadow:0 6px 16px rgba(20,50,120,.14)}
+  .date-btn:active{transform:scale(.98)}
+  .date-caret{color:var(--muted);font-size:12px}
+  .cal-pop{position:absolute;top:calc(100% + 8px);left:0;z-index:60;width:302px;max-width:88vw;background:var(--card-solid);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 55px rgba(8,18,40,.28),0 4px 14px rgba(8,18,40,.12);padding:14px;animation:calIn .18s cubic-bezier(.22,.9,.3,1)}
+  @keyframes calIn{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .cal-title{font-weight:750;font-size:15.5px}
+  .cal-nav{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--input-bg);color:var(--text);font-size:18px;cursor:pointer;line-height:1}
+  .cal-nav:hover{border-color:var(--accent);color:var(--accent)}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cal-dow{font-size:11px;font-weight:700;color:var(--muted);text-align:center;padding:5px 0}
+  .cal-day{min-height:38px;border-radius:11px;border:1px solid transparent;background:transparent;color:var(--text);font-size:14px;cursor:pointer;transition:background-color .15s ease,color .15s ease}
+  .cal-day:hover{background:var(--accent-soft)}
+  .cal-day.dim{color:var(--muted);opacity:.45}
+  .cal-day.today{border-color:var(--accent);font-weight:750}
+  .cal-day.sel{background:var(--accent);color:var(--on-accent);font-weight:750;box-shadow:0 5px 13px rgba(20,50,120,.3)}
+  .cal-foot{display:flex;justify-content:space-between;margin-top:10px}
+  @media (max-width:560px){ .cal-pop{left:50%;transform:translateX(-50%);animation:calInM .18s cubic-bezier(.22,.9,.3,1)} @keyframes calInM{from{opacity:0;transform:translateX(-50%) translateY(-4px)}to{opacity:1;transform:translateX(-50%)}} }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
     html{scroll-behavior:auto}
@@ -171,7 +193,7 @@
   <section id="tab-log">
     <div class="card">
       <h2 id="logTitle">Log a ride</h2>
-      <label>Date</label><div class="datewrap"><span class="date-display" id="rideDateDisplay"></span><input type="date" id="rideDate" aria-label="Ride date"></div>
+      <label>Date</label><div class="datepicker"><button type="button" class="date-btn" id="rideDateBtn" aria-haspopup="dialog" aria-expanded="false"><span id="rideDateDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="rideDate"><div class="cal-pop hidden" id="rideCal" role="dialog" aria-label="Choose a date"></div></div>
       <p class="muted" id="dayHint"></p>
       <div id="noDriveBox"></div>
       <label>Direction</label>
@@ -199,7 +221,7 @@
       <label>Who paid</label><select id="payFrom"></select>
       <label>Who received it</label><select id="payTo"></select>
       <label>Amount ($)</label><input type="number" id="payAmount" min="0" step="0.01" placeholder="e.g. 10">
-      <label>Date</label><div class="datewrap"><span class="date-display" id="payDateDisplay"></span><input type="date" id="payDate" aria-label="Payment date"></div>
+      <label>Date</label><div class="datepicker"><button type="button" class="date-btn" id="payDateBtn" aria-haspopup="dialog" aria-expanded="false"><span id="payDateDisplay"></span><span class="date-caret" aria-hidden="true">&#9662;</span></button><input type="hidden" id="payDate"><div class="cal-pop hidden" id="payCal" role="dialog" aria-label="Choose a date"></div></div>
       <label>Note (optional)</label><input type="text" id="payNote" placeholder="e.g. Zelle, cash">
       <div class="rowflex" style="margin-top:12px"><button class="btn" id="savePay">Save payment</button>
       <button class="btn ghost hidden" id="cancelEditPay">Cancel edit</button></div>
@@ -320,8 +342,43 @@ async function refresh() {
 function notice(msg, kind) { $("notice").innerHTML = msg ? `<div class="banner ${kind || "info"}">${esc(msg)}</div>` : ""; }
 
 /* ================================ rendering ============================== */
-function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); }
-function fmtDateDisplay(v) { if (!v) return "Select a date \u25BE"; const p = v.split("-"); return p[1] + "/" + p[2] + "/" + p[0] + "  \u25BE"; }
+function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); syncDateDisplays(); }
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTHS_S = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtDateDisplay(v) { if (!v) return "Select a date"; const d = new Date(v + "T12:00:00"); return WEEKDAYS_SHORT[d.getDay()] + ", " + MONTHS_S[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear(); }
+function makePicker(btnId, inputId, popId, onChange) {
+  const btn = $(btnId), inp = $(inputId), pop = $(popId);
+  let view = null;
+  const iso = (dt) => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+  function close() { pop.classList.add("hidden"); btn.setAttribute("aria-expanded", "false"); }
+  function render() {
+    const v = inp.value || todayStr(); const base = new Date(v + "T12:00:00");
+    if (!view) view = new Date(base.getFullYear(), base.getMonth(), 1);
+    const y = view.getFullYear(), m = view.getMonth();
+    const startDay = new Date(y, m, 1).getDay(); const days = new Date(y, m + 1, 0).getDate(); const prevDays = new Date(y, m, 0).getDate();
+    let cells = "";
+    ["Su","Mo","Tu","We","Th","Fr","Sa"].forEach(x => cells += `<span class="cal-dow">${x}</span>`);
+    for (let i = 0; i < 42; i++) {
+      const dn = i - startDay + 1; let dt, dim = false;
+      if (dn < 1) { dt = new Date(y, m - 1, prevDays + dn); dim = true; }
+      else if (dn > days) { dt = new Date(y, m + 1, dn - days); dim = true; }
+      else dt = new Date(y, m, dn);
+      const iday = iso(dt);
+      const cls = ["cal-day", dim ? "dim" : "", iday === v ? "sel" : "", iday === todayStr() ? "today" : ""].join(" ");
+      cells += `<button type="button" class="${cls}" data-iso="${iday}">${dt.getDate()}</button>`;
+    }
+    pop.innerHTML = `<div class="cal-head"><button type="button" class="cal-nav" data-nav="-1" aria-label="Previous month">&#8249;</button><span class="cal-title">${MONTHS[m]} ${y}</span><button type="button" class="cal-nav" data-nav="1" aria-label="Next month">&#8250;</button></div><div class="cal-grid">${cells}</div><div class="cal-foot"><button type="button" class="btn ghost small" data-today="1">Today</button><button type="button" class="btn ghost small" data-close="1">Close</button></div>`;
+    pop.querySelectorAll("[data-nav]").forEach(b => b.onclick = () => { view = new Date(y, m + Number(b.dataset.nav), 1); render(); });
+    pop.querySelectorAll("[data-iso]").forEach(b => b.onclick = () => { inp.value = b.dataset.iso; view = null; syncDateDisplays(); close(); if (onChange) onChange(); });
+    pop.querySelector("[data-today]").onclick = () => { inp.value = todayStr(); view = null; syncDateDisplays(); close(); if (onChange) onChange(); };
+    pop.querySelector("[data-close]").onclick = close;
+  }
+  function open() { view = null; render(); pop.classList.remove("hidden"); btn.setAttribute("aria-expanded", "true"); }
+  btn.onclick = (e) => { e.stopPropagation(); pop.classList.contains("hidden") ? open() : close(); };
+  pop.onclick = (e) => e.stopPropagation();
+  document.addEventListener("click", () => { if (!pop.classList.contains("hidden")) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+}
 function syncDateDisplays() { const rd = $("rideDateDisplay"); if (rd) rd.textContent = fmtDateDisplay($("rideDate").value); const pd = $("payDateDisplay"); if (pd) pd.textContent = fmtDateDisplay($("payDate").value); }
 
 function renderMode() {
@@ -427,8 +484,8 @@ function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b
 
 /* ================================= events ================================ */
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
-function wireDatePicker(id) { const inp = $(id); if (!inp) return; inp.addEventListener("click", () => { if (window.matchMedia && matchMedia("(pointer:fine)").matches && typeof inp.showPicker === "function") { try { inp.showPicker(); } catch (e) {} } }); }
-wireDatePicker("rideDate"); wireDatePicker("payDate");
+makePicker("rideDateBtn", "rideDate", "rideCal", () => { riderSelectionMemory = []; renderLog(); });
+makePicker("payDateBtn", "payDate", "payCal", null);
 $("rideDate").value = todayStr(); $("rideDate").onchange = () => { riderSelectionMemory = []; renderLog(); };
 document.querySelectorAll("#dirPills .pill").forEach(p => p.onclick = () => { selDirection = p.dataset.dir; renderLog(); });
 $("toggleNoDrive").onclick = async () => { const date = selectedDate(); const on = !state.noDriveDays.includes(date); await api.setNoDrive(date, on); await refresh(); };
