@@ -425,6 +425,8 @@ function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b
 
 /* ================================= events ================================ */
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+function wireDatePicker(id) { const inp = $(id); if (!inp) return; inp.addEventListener("click", () => { if (window.matchMedia && matchMedia("(pointer:fine)").matches && typeof inp.showPicker === "function") { try { inp.showPicker(); } catch (e) {} } }); }
+wireDatePicker("rideDate"); wireDatePicker("payDate");
 $("rideDate").value = todayStr(); $("rideDate").onchange = () => { riderSelectionMemory = []; renderLog(); };
 document.querySelectorAll("#dirPills .pill").forEach(p => p.onclick = () => { selDirection = p.dataset.dir; renderLog(); });
 $("toggleNoDrive").onclick = async () => { const date = selectedDate(); const on = !state.noDriveDays.includes(date); await api.setNoDrive(date, on); await refresh(); };
