@@ -1,0 +1,59 @@
+# Auto-deploy the carpool tracker to the EXISTING Cloudflare Pages project
+# (carpool-tracker, the Direct Upload project behind carpool-tracker-ahf.pages.dev)
+# on every push to main — so nobody has to upload a zip by hand again.
+#
+# The workflow assembles the exact same proven bundle as the manual zip:
+#   dist/index.html  <- public/index.html
+#   dist/_worker.js  <- functions/api/[[route]].js + the Advanced Mode wrapper
+# and deploys it with wrangler. The D1 binding (DB) lives in the Pages
+# project's settings and is untouched by deployments.
+#
+# Required GitHub repo secrets (Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN   — Cloudflare API token with "Cloudflare Pages: Edit"
+#   CLOUDFLARE_ACCOUNT_ID  — the Cloudflare account ID
+
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble deploy bundle
+        run: |
+          python3 - <<'PY'
+          import pathlib, shutil
+          dist = pathlib.Path("dist")
+          dist.mkdir(exist_ok=True)
+          shutil.copy("public/index.html", dist / "index.html")
+          src = pathlib.Path("functions/api/[[route]].js").read_text()
+          wrapper = """
+          // --- Advanced Mode entry (same wrapper as the manual zip) ---
+          export default {
+            async fetch(request, env, ctx) {
+              const u = new URL(request.url);
+              if (u.pathname === "/api" || u.pathname.startsWith("/api/")) {
+                return onRequest({ request, env, ctx, params: {}, data: {} });
+              }
+              return env.ASSETS.fetch(request);
+            },
+          };
+          """
+          (dist / "_worker.js").write_text(src + wrapper)
+          print("bundle assembled:", [p.name for p in dist.iterdir()])
+          PY
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=carpool-tracker --branch=main
