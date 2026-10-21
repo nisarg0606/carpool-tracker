@@ -188,7 +188,6 @@ const nameOf = (id) => { const p = state.people.find(x => x.id === id); return p
 async function refresh() {
   state = await api.getState();
   if (selDriverId && !state.people.some(p => p.id === selDriverId && p.canDrive)) selDriverId = null;
-  if (!selDriverId) { const d = state.people.find(p => p.canDrive); selDriverId = d ? d.id : null; }
   renderAll();
 }
 function notice(msg, kind) { $("notice").innerHTML = msg ? `<div class="banner ${kind || "info"}">${esc(msg)}</div>` : ""; }
@@ -329,7 +328,6 @@ async function boot() {
     try {
       const s = await remoteApi.getState();
       api = remoteApi; mode = "shared"; state = s;
-      if (selDriverId === null) { const d = state.people.find(p => p.canDrive); selDriverId = d ? d.id : null; }
       renderAll(); return;
     } catch (e) {
       if (/group code/i.test(e.message) && !groupCode()) {
