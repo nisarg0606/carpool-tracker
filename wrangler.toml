@@ -15,7 +15,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB" # the API reads env.DB — this name must stay "DB"
 database_name = "carpool-tracker"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "7ab64695-e274-408c-a3b1-75feb6728f0b"
 
 # Optional shared group code (recommended before sharing the link):
 #   wrangler pages secret put GROUP_CODE --project-name carpool-tracker
