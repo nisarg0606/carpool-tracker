@@ -387,12 +387,14 @@ function syncDateDisplays() { const rd = $("rideDateDisplay"); if (rd) rd.textCo
 function rideFormKey(driverId, riderIds) { return (driverId || "") + "|" + [...riderIds].sort((a, b) => a - b).join(","); }
 function updateSaveRideBtn() {
   const btn = $("saveRide"); if (!btn) return;
+  const cancel = $("cancelEditRide");
   if (editingRideId) {
     btn.textContent = "Update ride";
     const dirty = loadedRideSnapshot !== null && rideFormKey(selDriverId, currentRiders()) !== loadedRideSnapshot;
     btn.disabled = !dirty;
     btn.title = dirty ? "" : "No changes yet \u2014 change the driver or riders to enable Update.";
-  } else { btn.textContent = "Save ride"; btn.disabled = false; btn.title = ""; }
+    if (cancel) { cancel.classList.toggle("hidden", !dirty); cancel.title = "Discard your changes and restore the saved ride"; }
+  } else { btn.textContent = "Save ride"; btn.disabled = false; btn.title = ""; if (cancel) cancel.classList.add("hidden"); }
 }
 
 function renderMode() {
