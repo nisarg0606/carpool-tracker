@@ -122,6 +122,20 @@
     nav.tabs button{min-width:72px;font-size:14px}
     .ride,.pay,.person{flex-wrap:wrap}
   }
+
+  /* ===== overflow fixes (mobile): nothing may exceed the viewport ===== */
+  html,body{overflow-x:hidden}
+  header .row{flex-wrap:wrap}
+  header h1{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .head-actions{min-width:0;flex-wrap:wrap;justify-content:flex-end}
+  input,select,textarea{min-width:0;max-width:100%}
+  input[type="date"]{display:block;width:100%;max-width:100%}
+  .rowflex>.btn{min-width:0;max-width:100%;white-space:normal}
+  .pills .pill{min-width:0;white-space:normal}
+  @media (max-width:480px){
+    .badge{font-size:11px;padding:5px 8px}
+    .theme-toggle{min-height:36px;padding:7px 10px;font-size:12.5px}
+  }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
     html{scroll-behavior:auto}
