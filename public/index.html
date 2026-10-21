@@ -142,6 +142,12 @@
   input[type="date"]::-webkit-date-and-time-value{text-align:left;min-width:0;margin:0;white-space:nowrap;overflow:hidden}
   input[type="date"]::-webkit-calendar-picker-indicator{margin-left:auto;flex:none}
   input[type="date"]::-webkit-inner-spin-button{display:none}
+
+  /* ===== date display layer: styled text replaces the native iOS date box;
+     the real input sits invisibly on top and still opens the native picker ===== */
+  .datewrap{position:relative}
+  .date-display{display:flex;align-items:center;min-height:46px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--input-bg);color:var(--text);font-size:16px;pointer-events:none;white-space:nowrap;overflow:hidden}
+  .datewrap input[type="date"]{position:absolute;inset:0;width:100%;height:100%;min-height:0;padding:0;border:none;opacity:.001}
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
     html{scroll-behavior:auto}
@@ -163,7 +169,7 @@
   <section id="tab-log">
     <div class="card">
       <h2 id="logTitle">Log a ride</h2>
-      <label>Date</label><input type="date" id="rideDate">
+      <label>Date</label><div class="datewrap"><span class="date-display" id="rideDateDisplay"></span><input type="date" id="rideDate" aria-label="Ride date"></div>
       <p class="muted" id="dayHint"></p>
       <div id="noDriveBox"></div>
       <label>Direction</label>
@@ -191,7 +197,7 @@
       <label>Who paid</label><select id="payFrom"></select>
       <label>Who received it</label><select id="payTo"></select>
       <label>Amount ($)</label><input type="number" id="payAmount" min="0" step="0.01" placeholder="e.g. 10">
-      <label>Date</label><input type="date" id="payDate">
+      <label>Date</label><div class="datewrap"><span class="date-display" id="payDateDisplay"></span><input type="date" id="payDate" aria-label="Payment date"></div>
       <label>Note (optional)</label><input type="text" id="payNote" placeholder="e.g. Zelle, cash">
       <div class="rowflex" style="margin-top:12px"><button class="btn" id="savePay">Save payment</button>
       <button class="btn ghost hidden" id="cancelEditPay">Cancel edit</button></div>
@@ -313,6 +319,9 @@ function notice(msg, kind) { $("notice").innerHTML = msg ? `<div class="banner $
 
 /* ================================ rendering ============================== */
 function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); }
+function fmtDateDisplay(v) { if (!v) return "Select a date \u25BE"; const p = v.split("-"); return p[1] + "/" + p[2] + "/" + p[0] + "  \u25BE"; }
+function syncDateDisplays() { const rd = $("rideDateDisplay"); if (rd) rd.textContent = fmtDateDisplay($("rideDate").value); const pd = $("payDateDisplay"); if (pd) pd.textContent = fmtDateDisplay($("payDate").value); }
+
 function renderMode() {
   const b = $("modeBadge");
   b.textContent = mode === "shared" ? "● Shared live" : "Local only — not shared";
@@ -338,7 +347,7 @@ function renderLog() {
   document.querySelectorAll(".riderBox").forEach(c => c.onchange = renderRideMath); renderRideMath();
   const rides = state.rides.filter(r => r.date === date);
   $("ridesForDate").innerHTML = rides.length ? rides.map(rideRow).join("") : `<p class="muted">None yet.</p>`;
-  bindRideButtons($("ridesForDate"));
+  bindRideButtons($("ridesForDate")); syncDateDisplays();
 }
 let riderSelectionMemory = [];
 function currentRiders() { const boxes = [...document.querySelectorAll(".riderBox")]; return boxes.length ? boxes.filter(b => b.checked).map(b => Number(b.value)) : riderSelectionMemory; }
@@ -384,7 +393,7 @@ function renderBalances() {
     <span class="muted">From rides: ${money(Math.abs(grossFor))} · Paid so far: ${money(paidShown)} · Remaining: ${money(Math.abs(e.remaining))}</span></div>
     <div><button class="btn small" data-pay-pair="${from}|${to}|${Math.abs(e.remaining)}">Record payment</button></div></div>`;
   }).join("") : `<p class="muted">No rides yet, so nobody owes anything.</p>`;
-  document.querySelectorAll("[data-pay-pair]").forEach(b => b.onclick = () => { const [f, t, amt] = b.dataset.payPair.split("|"); $("payFrom").value = f; $("payTo").value = t; $("payAmount").value = (Number(amt) / 100).toFixed(2); $("payDate").value = todayStr(); $("payAmount").focus(); });
+  document.querySelectorAll("[data-pay-pair]").forEach(b => b.onclick = () => { const [f, t, amt] = b.dataset.payPair.split("|"); $("payFrom").value = f; $("payTo").value = t; $("payAmount").value = (Number(amt) / 100).toFixed(2); $("payDate").value = todayStr(); syncDateDisplays(); $("payAmount").focus(); });
   const totals = state.people.map(p => ({ p, drove: 0, rode: 0, earned: 0, owed: 0, paid: 0, received: 0 }));
   const T = (id) => totals.find(x => x.p.id === id);
   for (const r of state.rides) { const d = T(r.driverId); if (d) d.drove++; for (const rid of r.riderIds) { const x = T(rid); if (x) { x.rode++; x.owed += r.rateCents; } if (d) d.earned += r.rateCents; } }
@@ -401,7 +410,7 @@ function renderHistory() {
   $("allPayments").innerHTML = pays.length ? pays.map(p => `<div class="pay"><div><strong>${esc(nameOf(p.fromId))} paid ${esc(nameOf(p.toId))}: ${money(p.amountCents)}</strong><br><span class="muted">${esc(p.date)}${p.note ? " · " + esc(p.note) : ""}</span></div>
     <div class="rowflex"><button class="btn ghost small" data-edit-pay="${p.id}">Edit</button><button class="btn danger small" data-del-pay="${p.id}">Delete</button></div></div>`).join("") : `<p class="muted">No payments recorded yet.</p>`;
   document.querySelectorAll("[data-del-pay]").forEach(b => b.onclick = async () => { if (confirm("Delete this payment? Balances will recalculate.")) { await api.deletePayment(Number(b.dataset.delPay)); await refresh(); } });
-  document.querySelectorAll("[data-edit-pay]").forEach(b => b.onclick = () => { const p = state.payments.find(x => x.id === Number(b.dataset.editPay)); if (!p) return; editingPaymentId = p.id; $("payFrom").innerHTML = state.people.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(""); $("payTo").innerHTML = $("payFrom").innerHTML; $("payFrom").value = p.fromId; $("payTo").value = p.toId; $("payAmount").value = (p.amountCents / 100).toFixed(2); $("payDate").value = p.date; $("payNote").value = p.note || ""; $("payTitle").textContent = "Edit payment"; $("savePay").textContent = "Save changes"; $("cancelEditPay").classList.remove("hidden"); switchTab("balances"); });
+  document.querySelectorAll("[data-edit-pay]").forEach(b => b.onclick = () => { const p = state.payments.find(x => x.id === Number(b.dataset.editPay)); if (!p) return; editingPaymentId = p.id; $("payFrom").innerHTML = state.people.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(""); $("payTo").innerHTML = $("payFrom").innerHTML; $("payFrom").value = p.fromId; $("payTo").value = p.toId; $("payAmount").value = (p.amountCents / 100).toFixed(2); $("payDate").value = p.date; syncDateDisplays(); $("payNote").value = p.note || ""; $("payTitle").textContent = "Edit payment"; $("savePay").textContent = "Save changes"; $("cancelEditPay").classList.remove("hidden"); switchTab("balances"); });
 }
 function renderSettings() {
   $("peopleList").innerHTML = state.people.map(p => `<div class="person"><div class="rowflex" style="flex:1"><input type="text" value="${esc(p.name)}" id="person-name-${p.id}" style="max-width:200px">
