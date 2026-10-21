@@ -216,7 +216,7 @@ function renderLog() {
     `<button type="button" class="pill ${p.id === selDriverId ? "sel" : ""}" data-driver="${p.id}">${esc(p.name)}</button>`).join("") || `<span class="muted">No drivers yet — mark someone “Can drive” in People &amp; settings.</span>`;
   document.querySelectorAll("#driverPills .pill").forEach(p => p.onclick = () => { selDriverId = Number(p.dataset.driver); renderLog(); });
   $("riderChecks").innerHTML = state.people.filter(p => p.id !== selDriverId).map(p =>
-    `<label class="check"><input type="checkbox" class="riderBox" value="${p.id}" ${currentRiders().includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("");
+    `<label class="check"><input type="checkbox" class="riderBox" value="${p.id}" ${riderSelectionMemory.includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("");
   document.querySelectorAll(".riderBox").forEach(c => c.onchange = renderRideMath); renderRideMath();
   const rides = state.rides.filter(r => r.date === date);
   $("ridesForDate").innerHTML = rides.length ? rides.map(rideRow).join("") : `<p class="muted">None yet.</p>`;
@@ -301,13 +301,13 @@ document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => swit
 $("rideDate").value = todayStr(); $("rideDate").onchange = () => { riderSelectionMemory = []; renderLog(); };
 document.querySelectorAll("#dirPills .pill").forEach(p => p.onclick = () => { selDirection = p.dataset.dir; renderLog(); });
 $("toggleNoDrive").onclick = async () => { const date = selectedDate(); const on = !state.noDriveDays.includes(date); await api.setNoDrive(date, on); await refresh(); };
-$("cancelEditRide").onclick = () => { editingRideId = null; riderSelectionMemory = []; $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); renderLog(); };
+$("cancelEditRide").onclick = () => { editingRideId = null; selDriverId = null; riderSelectionMemory = []; document.querySelectorAll(".riderBox").forEach(c => { c.checked = false; }); $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); renderLog(); };
 $("saveRide").onclick = async () => {
   const riderIds = currentRiders().filter(id => id !== selDriverId);
   if (!selDriverId) return alert("Pick a driver first (someone marked “Can drive”).");
   if (!riderIds.length) return alert("Pick at least one rider, or mark the day as no-drive.");
   const body = { date: selectedDate(), direction: selDirection, driverId: selDriverId, riderIds };
-  try { if (editingRideId) await api.updateRide(editingRideId, body); else await api.addRide(body); editingRideId = null; riderSelectionMemory = []; $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); await refresh(); notice("Ride saved."); }
+  try { if (editingRideId) await api.updateRide(editingRideId, body); else await api.addRide(body); editingRideId = null; selDriverId = null; riderSelectionMemory = []; document.querySelectorAll(".riderBox").forEach(c => { c.checked = false; }); $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); await refresh(); notice("Ride saved."); }
   catch (e) { alert(e.message); }
 };
 $("savePay").onclick = async () => {
