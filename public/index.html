@@ -172,6 +172,8 @@
   .cal-day.sel{background:var(--accent);color:var(--on-accent);font-weight:750;box-shadow:0 5px 13px rgba(20,50,120,.3)}
   .cal-foot{display:flex;justify-content:space-between;margin-top:10px}
   @media (max-width:560px){ .cal-pop{left:50%;transform:translateX(-50%);animation:calInM .18s cubic-bezier(.22,.9,.3,1)} @keyframes calInM{from{opacity:0;transform:translateX(-50%) translateY(-4px)}to{opacity:1;transform:translateX(-50%)}} }
+
+  button.btn:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
     html{scroll-behavior:auto}
@@ -332,6 +334,7 @@ let api = localApi;
 
 /* ================================ app state ============================== */
 let state = null, selDirection = "to_office", selDriverId = null, editingRideId = null, editingPaymentId = null;
+let loadedRideSnapshot = null, formContextKey = null;
 const nameOf = (id) => { const p = state.people.find(x => x.id === id); return p ? p.name : "(removed)"; };
 
 async function refresh() {
@@ -381,6 +384,17 @@ function makePicker(btnId, inputId, popId, onChange) {
 }
 function syncDateDisplays() { const rd = $("rideDateDisplay"); if (rd) rd.textContent = fmtDateDisplay($("rideDate").value); const pd = $("payDateDisplay"); if (pd) pd.textContent = fmtDateDisplay($("payDate").value); }
 
+function rideFormKey(driverId, riderIds) { return (driverId || "") + "|" + [...riderIds].sort((a, b) => a - b).join(","); }
+function updateSaveRideBtn() {
+  const btn = $("saveRide"); if (!btn) return;
+  if (editingRideId) {
+    btn.textContent = "Update ride";
+    const dirty = loadedRideSnapshot !== null && rideFormKey(selDriverId, currentRiders()) !== loadedRideSnapshot;
+    btn.disabled = !dirty;
+    btn.title = dirty ? "" : "No changes yet \u2014 change the driver or riders to enable Update.";
+  } else { btn.textContent = "Save ride"; btn.disabled = false; btn.title = ""; }
+}
+
 function renderMode() {
   const b = $("modeBadge");
   b.textContent = mode === "shared" ? "● Shared live" : "Local only — not shared";
@@ -397,6 +411,21 @@ function renderLog() {
   $("dayHint").textContent = `${WEEKDAYS[d.getDay()]} ${date} — ${isOffice ? "usual office day" : "not a usual office day (you can still log a ride)"}`;
   $("noDriveBox").innerHTML = isNoDrive ? `<div class="banner warn">Marked “No drive today” for this date.</div>` : "";
   $("toggleNoDrive").textContent = isNoDrive ? "Undo “No drive today”" : "Mark “No drive today”";
+
+  if (editingRideId && !state.rides.some(r => r.id === editingRideId)) formContextKey = null;
+  const ctxKey = date + "|" + selDirection;
+  if (formContextKey !== ctxKey) {
+    formContextKey = ctxKey;
+    const existing = state.rides.filter(r => r.date === date && r.direction === selDirection).sort((a, b) => b.id - a.id)[0];
+    if (existing) {
+      editingRideId = existing.id; selDriverId = existing.driverId; riderSelectionMemory = [...existing.riderIds];
+      loadedRideSnapshot = rideFormKey(existing.driverId, existing.riderIds);
+      $("logTitle").textContent = "Edit ride"; $("cancelEditRide").classList.remove("hidden");
+    } else {
+      editingRideId = null; selDriverId = null; riderSelectionMemory = []; loadedRideSnapshot = null;
+      $("logTitle").textContent = "Log a ride"; $("cancelEditRide").classList.add("hidden");
+    }
+  }
   document.querySelectorAll("#dirPills .pill").forEach(p => p.classList.toggle("sel", p.dataset.dir === selDirection));
   $("driverPills").innerHTML = state.people.filter(p => p.canDrive).map(p =>
     `<button type="button" class="pill ${p.id === selDriverId ? "sel" : ""}" data-driver="${p.id}">${esc(p.name)}</button>`).join("") || `<span class="muted">No drivers yet — mark someone “Can drive” in People &amp; settings.</span>`;
@@ -406,11 +435,11 @@ function renderLog() {
   document.querySelectorAll(".riderBox").forEach(c => c.onchange = renderRideMath); renderRideMath();
   const rides = state.rides.filter(r => r.date === date);
   $("ridesForDate").innerHTML = rides.length ? rides.map(rideRow).join("") : `<p class="muted">None yet.</p>`;
-  bindRideButtons($("ridesForDate")); syncDateDisplays();
+  bindRideButtons($("ridesForDate")); syncDateDisplays(); updateSaveRideBtn();
 }
 let riderSelectionMemory = [];
 function currentRiders() { const boxes = [...document.querySelectorAll(".riderBox")]; return boxes.length ? boxes.filter(b => b.checked).map(b => Number(b.value)) : riderSelectionMemory; }
-function renderRideMath() { riderSelectionMemory = currentRiders(); const n = riderSelectionMemory.length; $("rideMath").textContent = n ? `${n} rider${n > 1 ? "s" : ""} × ${money(state.settings.rateCents)} = ${money(n * state.settings.rateCents)} to the driver for this ride.` : "Pick at least one rider to save a ride (or mark no drive)."; }
+function renderRideMath() { riderSelectionMemory = currentRiders(); const n = riderSelectionMemory.length; $("rideMath").textContent = n ? `${n} rider${n > 1 ? "s" : ""} × ${money(state.settings.rateCents)} = ${money(n * state.settings.rateCents)} to the driver for this ride.` : "Pick at least one rider to save a ride (or mark no drive)."; updateSaveRideBtn(); }
 function rideRow(r) {
   return `<div class="ride"><div><strong>${r.direction === "to_office" ? "☀️ To office" : "🌙 Coming back"}</strong> · ${esc(r.date)}<br>
   <span class="muted">Driver: ${esc(nameOf(r.driverId))} · Riders: ${r.riderIds.map(nameOf).map(esc).join(", ") || "none"} · ${money(r.rateCents)} per rider</span></div>
@@ -423,7 +452,8 @@ function bindRideButtons(root) {
 function startEditRide(id) {
   const r = state.rides.find(x => x.id === id); if (!r) return;
   editingRideId = id; selDirection = r.direction; selDriverId = r.driverId; riderSelectionMemory = [...r.riderIds];
-  $("rideDate").value = r.date; $("logTitle").textContent = "Edit ride"; $("saveRide").textContent = "Save changes"; $("cancelEditRide").classList.remove("hidden");
+  formContextKey = r.date + "|" + r.direction; loadedRideSnapshot = rideFormKey(r.driverId, r.riderIds);
+  $("rideDate").value = r.date; $("logTitle").textContent = "Edit ride"; $("cancelEditRide").classList.remove("hidden");
   switchTab("log"); renderLog();
   riderSelectionMemory = [...r.riderIds];
   document.querySelectorAll(".riderBox").forEach(c => { c.checked = r.riderIds.includes(Number(c.value)); }); renderRideMath();
@@ -489,13 +519,13 @@ makePicker("payDateBtn", "payDate", "payCal", null);
 $("rideDate").value = todayStr(); $("rideDate").onchange = () => { riderSelectionMemory = []; renderLog(); };
 document.querySelectorAll("#dirPills .pill").forEach(p => p.onclick = () => { selDirection = p.dataset.dir; renderLog(); });
 $("toggleNoDrive").onclick = async () => { const date = selectedDate(); const on = !state.noDriveDays.includes(date); await api.setNoDrive(date, on); await refresh(); };
-$("cancelEditRide").onclick = () => { editingRideId = null; selDriverId = null; riderSelectionMemory = []; document.querySelectorAll(".riderBox").forEach(c => { c.checked = false; }); $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); renderLog(); };
+$("cancelEditRide").onclick = () => { const r = editingRideId ? state.rides.find(x => x.id === editingRideId) : null; if (r) { selDriverId = r.driverId; riderSelectionMemory = [...r.riderIds]; loadedRideSnapshot = rideFormKey(r.driverId, r.riderIds); } else { editingRideId = null; selDriverId = null; riderSelectionMemory = []; loadedRideSnapshot = null; $("logTitle").textContent = "Log a ride"; $("cancelEditRide").classList.add("hidden"); } renderLog(); document.querySelectorAll(".riderBox").forEach(c => { c.checked = riderSelectionMemory.includes(Number(c.value)); }); renderRideMath(); };
 $("saveRide").onclick = async () => {
   const riderIds = currentRiders().filter(id => id !== selDriverId);
   if (!selDriverId) return alert("Pick a driver first (someone marked “Can drive”).");
   if (!riderIds.length) return alert("Pick at least one rider, or mark the day as no-drive.");
   const body = { date: selectedDate(), direction: selDirection, driverId: selDriverId, riderIds };
-  try { if (editingRideId) await api.updateRide(editingRideId, body); else await api.addRide(body); editingRideId = null; selDriverId = null; riderSelectionMemory = []; document.querySelectorAll(".riderBox").forEach(c => { c.checked = false; }); $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); await refresh(); notice("Ride saved."); }
+  try { if (editingRideId) await api.updateRide(editingRideId, body); else await api.addRide(body); await refresh(); const saved = state.rides.filter(r => r.date === body.date && r.direction === body.direction).sort((a, b) => b.id - a.id)[0]; if (saved) { editingRideId = saved.id; selDriverId = saved.driverId; riderSelectionMemory = [...saved.riderIds]; loadedRideSnapshot = rideFormKey(saved.driverId, saved.riderIds); formContextKey = body.date + "|" + body.direction; $("logTitle").textContent = "Edit ride"; $("cancelEditRide").classList.remove("hidden"); renderLog(); } notice("Ride saved."); }
   catch (e) { alert(e.message); }
 };
 $("savePay").onclick = async () => {
