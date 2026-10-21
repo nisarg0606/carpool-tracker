@@ -1,0 +1,23 @@
+# Carpool Tracker — ONE Cloudflare Pages project.
+# The static frontend (/public), the Pages Functions API (/functions) and the
+# D1 database binding below are all part of this single project/deployment.
+# There is no separate backend server to run or maintain.
+#
+# This file is an EXAMPLE/template: replace the database_id with the id of
+# the D1 database you create (step 2 in README.md). When you deploy through
+# the Cloudflare dashboard instead of wrangler, you don't even need this file —
+# just set the same D1 binding (variable name: DB) in the project settings.
+
+name = "carpool-tracker"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB" # the API reads env.DB — this name must stay "DB"
+database_name = "carpool-tracker"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# Optional shared group code (recommended before sharing the link):
+#   wrangler pages secret put GROUP_CODE --project-name carpool-tracker
+# …or set GROUP_CODE in the dashboard: Pages project > Settings >
+# Environment variables. Do NOT put the real code in this file.

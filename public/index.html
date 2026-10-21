@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carpool Tracker</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--text:#17202a;--muted:#68707c;--line:#e3e6ea;--accent:#2563eb;--accent2:#0ea5a4;--danger:#dc2626;--ok:#15803d;--radius:14px}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{background:#111827;color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5}
+  header .row{display:flex;justify-content:space-between;align-items:center;max-width:880px;margin:0 auto;gap:10px}
+  header h1{font-size:19px;margin:0} .badge{font-size:12px;padding:4px 9px;border-radius:999px;background:#374151;white-space:nowrap}
+  .badge.shared{background:var(--ok)} .badge.local{background:#b45309}
+  main{max-width:880px;margin:0 auto;padding:14px 12px 40px}
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  nav.tabs button{flex:1;min-width:80px;padding:10px 6px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-size:15px;cursor:pointer}
+  nav.tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:17px} .card h3{margin:14px 0 8px;font-size:15px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;font-size:16px;background:#fff;color:var(--text)}
+  button.btn{padding:10px 14px;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:15px;cursor:pointer}
+  button.btn.secondary{background:#fff;color:var(--accent)} button.btn.ghost{background:#fff;color:var(--text);border-color:var(--line)}
+  button.btn.danger{background:#fff;color:var(--danger);border-color:var(--danger)} button.small{padding:6px 10px;font-size:13px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px} .pill{padding:9px 13px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;font-size:15px}
+  .pill.sel{background:var(--accent);color:#fff;border-color:var(--accent)} .pill.sel2{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+  .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+  .check{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:9px;padding:10px;font-size:15px}
+  .check input{width:auto} .muted{color:var(--muted);font-size:13px} .rowflex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .ride,.pay,.person{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:10px 0} .ride:first-of-type,.pay:first-of-type{border-top:none}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right} th:first-child,td:first-child{text-align:left}
+  .scrollx{overflow-x:auto} .settled{color:var(--ok);font-weight:600} .credit{color:var(--accent2);font-weight:600}
+  .banner{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px} .banner.warn{background:#fef3c7} .banner.info{background:#dbeafe}
+  .hidden{display:none!important} .amount{font-weight:700}
+</style>
+</head>
+<body>
+<header><div class="row"><h1>🚗 Carpool Tracker</h1><span id="modeBadge" class="badge">Connecting…</span></div></header>
+<main>
+  <div id="notice"></div>
+  <nav class="tabs">
+    <button data-tab="log" class="active">Log ride</button>
+    <button data-tab="balances">Balances</button>
+    <button data-tab="history">History</button>
+    <button data-tab="settings">People &amp; settings</button>
+  </nav>
+
+  <!-- LOG -->
+  <section id="tab-log">
+    <div class="card">
+      <h2 id="logTitle">Log a ride</h2>
+      <label>Date</label><input type="date" id="rideDate">
+      <p class="muted" id="dayHint"></p>
+      <div id="noDriveBox"></div>
+      <label>Direction</label>
+      <div class="pills" id="dirPills">
+        <button class="pill sel" data-dir="to_office" type="button">☀️ To office</button>
+        <button class="pill" data-dir="return" type="button">🌙 Coming back</button>
+      </div>
+      <label>Who drove?</label><div class="pills" id="driverPills"></div>
+      <label>Who rode along? (tap everyone in the car besides the driver)</label><div class="checks" id="riderChecks"></div>
+      <p class="muted" id="rideMath"></p>
+      <div class="rowflex" style="margin-top:12px">
+        <button class="btn" id="saveRide">Save ride</button>
+        <button class="btn ghost hidden" id="cancelEditRide">Cancel edit</button>
+        <button class="btn secondary" id="toggleNoDrive">Mark “No drive today”</button>
+      </div>
+    </div>
+    <div class="card"><h2>Rides on this date</h2><div id="ridesForDate"><p class="muted">None yet.</p></div></div>
+  </section>
+
+  <!-- BALANCES -->
+  <section id="tab-balances" class="hidden">
+    <div class="card"><h2>Who owes whom</h2><div id="owesList"></div>
+      <p class="muted">Netted per pair — e.g. what Nisarg and Apurva owe each other is combined into one number. A full payment makes a pair $0 / settled; a partial payment just reduces the remaining amount. Overpaying shows as credit the other way.</p></div>
+    <div class="card"><h2 id="payTitle">Record a payment</h2>
+      <label>Who paid</label><select id="payFrom"></select>
+      <label>Who received it</label><select id="payTo"></select>
+      <label>Amount ($)</label><input type="number" id="payAmount" min="0" step="0.01" placeholder="e.g. 10">
+      <label>Date</label><input type="date" id="payDate">
+      <label>Note (optional)</label><input type="text" id="payNote" placeholder="e.g. Zelle, cash">
+      <div class="rowflex" style="margin-top:12px"><button class="btn" id="savePay">Save payment</button>
+      <button class="btn ghost hidden" id="cancelEditPay">Cancel edit</button></div>
+    </div>
+    <div class="card"><h2>Per person (all time)</h2><div class="scrollx"><table id="personTable"></table></div></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" class="hidden">
+    <div class="card"><h2>All rides</h2><div id="allRides"></div></div>
+    <div class="card"><h2>All payments</h2><div id="allPayments"></div></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="hidden">
+    <div class="card"><h2>People</h2><div id="peopleList"></div>
+      <h3>Add a person</h3>
+      <label>Name</label><input type="text" id="newPersonName" placeholder="Name">
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="newPersonDrive"> Can drive</label>
+      <div style="margin-top:10px"><button class="btn" id="addPerson">Add person</button></div>
+    </div>
+    <div class="card"><h2>Settings</h2>
+      <label>Rate per rider, per one-way ride ($)</label><input type="number" id="rateInput" min="0" step="0.01">
+      <p class="muted">Changing the rate applies going forward — rides already logged keep the rate they were logged at.</p>
+      <label>Usual office days</label><div class="checks" id="officeDayChecks"></div>
+      <div style="margin-top:12px"><button class="btn" id="saveSettings">Save settings</button></div>
+      <h3>Sharing</h3><p class="muted" id="shareInfo"></p>
+      <button class="btn secondary small" id="setCode">Set / change group code on this device</button>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ============================== utilities ============================== */
+const $ = (id) => document.getElementById(id);
+const money = (c) => "$" + (c / 100).toFixed(2).replace(/\.00$/, "");
+const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/* ================= local fallback store (NOT shared mode) =================
+   Used ONLY when /api is unreachable — e.g. this file opened as a plain file
+   or served by a plain static server with no Functions/D1 behind it.
+   Data lives in this browser's localStorage on this one device only.       */
+const LOCAL_KEY = "carpool-tracker-local-v1";
+const localStore = {
+  load() {
+    try { const raw = localStorage.getItem(LOCAL_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
+    const seed = {
+      people: [
+        { id: 1, name: "Nisarg", canDrive: true }, { id: 2, name: "Apurva", canDrive: true },
+        { id: 3, name: "Chetan", canDrive: false }, { id: 4, name: "Sai", canDrive: false }, { id: 5, name: "Aakash", canDrive: false }],
+      settings: { rateCents: 500, officeDays: [2, 3, 4] }, rides: [], payments: [], noDriveDays: [], nextId: 100,
+    };
+    localStore.save(seed); return seed;
+  },
+  save(s) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(s)); } catch (e) {} },
+};
+let localState = null;
+const localApi = {
+  async getState() { localState = localStore.load(); return structuredClone(localState); },
+  async addPerson(b) { const s = localStore.load(); if (s.people.some(p => p.name.toLowerCase() === b.name.toLowerCase())) throw new Error("That name is already used."); const p = { id: s.nextId++, name: b.name, canDrive: !!b.canDrive }; s.people.push(p); localStore.save(s); return p; },
+  async updatePerson(id, b) { const s = localStore.load(); const p = s.people.find(x => x.id === id); if (p) { p.name = b.name; p.canDrive = !!b.canDrive; } localStore.save(s); return p; },
+  async deletePerson(id) { const s = localStore.load(); const used = s.rides.some(r => r.driverId === id || r.riderIds.includes(id)) || s.payments.some(p => p.fromId === id || p.toId === id); if (used) throw new Error("This person has rides or payments in history, so they can't be removed. Rename them instead."); s.people = s.people.filter(p => p.id !== id); localStore.save(s); },
+  async saveSettings(v) { const s = localStore.load(); s.settings = v; localStore.save(s); return v; },
+  async addRide(b) { const s = localStore.load(); const r = { id: s.nextId++, rateCents: s.settings.rateCents, ...b }; s.rides.push(r); s.noDriveDays = s.noDriveDays.filter(d => d !== b.date); localStore.save(s); return r; },
+  async updateRide(id, b) { const s = localStore.load(); const r = s.rides.find(x => x.id === id); if (r) Object.assign(r, b); localStore.save(s); return r; },
+  async deleteRide(id) { const s = localStore.load(); s.rides = s.rides.filter(r => r.id !== id); localStore.save(s); },
+  async addPayment(b) { const s = localStore.load(); const p = { id: s.nextId++, ...b }; s.payments.push(p); localStore.save(s); return p; },
+  async updatePayment(id, b) { const s = localStore.load(); const p = s.payments.find(x => x.id === id); if (p) Object.assign(p, b); localStore.save(s); return p; },
+  async deletePayment(id) { const s = localStore.load(); s.payments = s.payments.filter(p => p.id !== id); localStore.save(s); },
+  async setNoDrive(date, on) { const s = localStore.load(); s.noDriveDays = on ? [...new Set([...s.noDriveDays, date])] : s.noDriveDays.filter(d => d !== date); localStore.save(s); },
+};
+
+/* ============================ shared API client =========================== */
+let mode = "local"; // becomes "shared" only after a successful /api/state
+const groupCode = () => { try { return localStorage.getItem("carpool-group-code") || ""; } catch (e) { return ""; } };
+async function apiFetch(path, options = {}) {
+  const headers = { "content-type": "application/json", ...(options.headers || {}) };
+  const code = groupCode(); if (code) headers["x-group-code"] = code;
+  const res = await fetch(path, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("Request failed (" + res.status + ")"));
+  return data;
+}
+const remoteApi = {
+  async getState() { return apiFetch("/api/state"); },
+  async addPerson(b) { return apiFetch("/api/people", { method: "POST", body: JSON.stringify(b) }); },
+  async updatePerson(id, b) { return apiFetch("/api/people/" + id, { method: "PUT", body: JSON.stringify(b) }); },
+  async deletePerson(id) { return apiFetch("/api/people/" + id, { method: "DELETE" }); },
+  async saveSettings(v) { return apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(v) }); },
+  async addRide(b) { return apiFetch("/api/rides", { method: "POST", body: JSON.stringify(b) }); },
+  async updateRide(id, b) { return apiFetch("/api/rides/" + id, { method: "PUT", body: JSON.stringify(b) }); },
+  async deleteRide(id) { return apiFetch("/api/rides/" + id, { method: "DELETE" }); },
+  async addPayment(b) { return apiFetch("/api/payments", { method: "POST", body: JSON.stringify(b) }); },
+  async updatePayment(id, b) { return apiFetch("/api/payments/" + id, { method: "PUT", body: JSON.stringify(b) }); },
+  async deletePayment(id) { return apiFetch("/api/payments/" + id, { method: "DELETE" }); },
+  async setNoDrive(date, on) { return on ? apiFetch("/api/no-drive", { method: "POST", body: JSON.stringify({ date }) }) : apiFetch("/api/no-drive/" + date, { method: "DELETE" }); },
+};
+let api = localApi;
+
+/* ================================ app state ============================== */
+let state = null, selDirection = "to_office", selDriverId = null, editingRideId = null, editingPaymentId = null;
+const nameOf = (id) => { const p = state.people.find(x => x.id === id); return p ? p.name : "(removed)"; };
+
+async function refresh() {
+  state = await api.getState();
+  if (selDriverId && !state.people.some(p => p.id === selDriverId && p.canDrive)) selDriverId = null;
+  if (!selDriverId) { const d = state.people.find(p => p.canDrive); selDriverId = d ? d.id : null; }
+  renderAll();
+}
+function notice(msg, kind) { $("notice").innerHTML = msg ? `<div class="banner ${kind || "info"}">${esc(msg)}</div>` : ""; }
+
+/* ================================ rendering ============================== */
+function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); }
+function renderMode() {
+  const b = $("modeBadge");
+  b.textContent = mode === "shared" ? "● Shared live" : "Local only — not shared";
+  b.className = "badge " + (mode === "shared" ? "shared" : "local");
+  $("shareInfo").textContent = mode === "shared"
+    ? "This is the shared live version: everyone who opens this link sees the same rides, balances and payments."
+    : "This copy is running in LOCAL fallback mode (no /api found). Data is only on this device and is NOT shared. Deploy it with the Pages Functions + D1 binding (see README) for the shared live version.";
+}
+function selectedDate() { return $("rideDate").value || todayStr(); }
+function renderLog() {
+  const date = selectedDate(); const d = new Date(date + "T12:00:00");
+  const isOffice = state.settings.officeDays.includes(d.getDay());
+  const isNoDrive = state.noDriveDays.includes(date);
+  $("dayHint").textContent = `${WEEKDAYS[d.getDay()]} ${date} — ${isOffice ? "usual office day" : "not a usual office day (you can still log a ride)"}`;
+  $("noDriveBox").innerHTML = isNoDrive ? `<div class="banner warn">Marked “No drive today” for this date.</div>` : "";
+  $("toggleNoDrive").textContent = isNoDrive ? "Undo “No drive today”" : "Mark “No drive today”";
+  document.querySelectorAll("#dirPills .pill").forEach(p => p.classList.toggle("sel", p.dataset.dir === selDirection));
+  $("driverPills").innerHTML = state.people.filter(p => p.canDrive).map(p =>
+    `<button type="button" class="pill ${p.id === selDriverId ? "sel" : ""}" data-driver="${p.id}">${esc(p.name)}</button>`).join("") || `<span class="muted">No drivers yet — mark someone “Can drive” in People &amp; settings.</span>`;
+  document.querySelectorAll("#driverPills .pill").forEach(p => p.onclick = () => { selDriverId = Number(p.dataset.driver); renderLog(); });
+  $("riderChecks").innerHTML = state.people.filter(p => p.id !== selDriverId).map(p =>
+    `<label class="check"><input type="checkbox" class="riderBox" value="${p.id}" ${currentRiders().includes(p.id) ? "checked" : ""}> ${esc(p.name)}</label>`).join("");
+  document.querySelectorAll(".riderBox").forEach(c => c.onchange = renderRideMath); renderRideMath();
+  const rides = state.rides.filter(r => r.date === date);
+  $("ridesForDate").innerHTML = rides.length ? rides.map(rideRow).join("") : `<p class="muted">None yet.</p>`;
+  bindRideButtons($("ridesForDate"));
+}
+let riderSelectionMemory = [];
+function currentRiders() { const boxes = [...document.querySelectorAll(".riderBox")]; return boxes.length ? boxes.filter(b => b.checked).map(b => Number(b.value)) : riderSelectionMemory; }
+function renderRideMath() { riderSelectionMemory = currentRiders(); const n = riderSelectionMemory.length; $("rideMath").textContent = n ? `${n} rider${n > 1 ? "s" : ""} × ${money(state.settings.rateCents)} = ${money(n * state.settings.rateCents)} to the driver for this ride.` : "Pick at least one rider to save a ride (or mark no drive)."; }
+function rideRow(r) {
+  return `<div class="ride"><div><strong>${r.direction === "to_office" ? "☀️ To office" : "🌙 Coming back"}</strong> · ${esc(r.date)}<br>
+  <span class="muted">Driver: ${esc(nameOf(r.driverId))} · Riders: ${r.riderIds.map(nameOf).map(esc).join(", ") || "none"} · ${money(r.rateCents)} per rider</span></div>
+  <div class="rowflex"><button class="btn ghost small" data-edit-ride="${r.id}">Edit</button><button class="btn danger small" data-del-ride="${r.id}">Delete</button></div></div>`;
+}
+function bindRideButtons(root) {
+  root.querySelectorAll("[data-edit-ride]").forEach(b => b.onclick = () => startEditRide(Number(b.dataset.editRide)));
+  root.querySelectorAll("[data-del-ride]").forEach(b => b.onclick = async () => { if (confirm("Delete this ride?")) { await api.deleteRide(Number(b.dataset.delRide)); await refresh(); } });
+}
+function startEditRide(id) {
+  const r = state.rides.find(x => x.id === id); if (!r) return;
+  editingRideId = id; selDirection = r.direction; selDriverId = r.driverId; riderSelectionMemory = [...r.riderIds];
+  $("rideDate").value = r.date; $("logTitle").textContent = "Edit ride"; $("saveRide").textContent = "Save changes"; $("cancelEditRide").classList.remove("hidden");
+  switchTab("log"); renderLog();
+  riderSelectionMemory = [...r.riderIds];
+  document.querySelectorAll(".riderBox").forEach(c => { c.checked = r.riderIds.includes(Number(c.value)); }); renderRideMath();
+}
+function computePairs() {
+  const pairs = new Map();
+  const key = (a, b) => [Math.min(a, b), Math.max(a, b)].join("|");
+  const add = (from, to, cents, field) => { if (from === to) return; const k = key(from, to); const e = pairs.get(k) || { low: Math.min(from, to), high: Math.max(from, to), gross: 0, paidSigned: 0 }; const sign = from === e.low ? 1 : -1; e[field] += sign * cents; pairs.set(k, e); };
+  for (const r of state.rides) for (const riderId of r.riderIds) add(riderId, r.driverId, r.rateCents, "gross");
+  for (const p of state.payments) add(p.fromId, p.toId, p.amountCents, "paidSigned");
+  return [...pairs.values()].map(e => ({ ...e, remaining: e.gross - e.paidSigned }));
+}
+function renderBalances() {
+  const opts = state.people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  if (!$("payFrom").dataset.init) { $("payFrom").innerHTML = opts; $("payTo").innerHTML = opts; $("payFrom").dataset.init = "1"; }
+  else { const f = $("payFrom").value, t = $("payTo").value; $("payFrom").innerHTML = opts; $("payTo").innerHTML = opts; $("payFrom").value = f; $("payTo").value = t; }
+  if (!$("payDate").value) $("payDate").value = todayStr();
+  const entries = computePairs().filter(e => e.gross !== 0 || e.paidSigned !== 0);
+  $("owesList").innerHTML = entries.length ? entries.map(e => {
+    if (e.remaining === 0) { const a = e.gross > 0 ? e.low : e.high, b = e.gross > 0 ? e.high : e.low; return `<div class="ride"><div>${esc(nameOf(a))} → ${esc(nameOf(b))}: <span class="settled">Settled ($0)</span><br><span class="muted">Rides ${money(Math.abs(e.gross))} · paid ${money(Math.abs(e.gross))}</span></div></div>`; }
+    const from = e.remaining > 0 ? e.low : e.high, to = e.remaining > 0 ? e.high : e.low;
+    const grossFor = e.gross > 0 ? e.gross : -e.gross; const paidToward = Math.abs(e.gross) - Math.abs(e.remaining) + (Math.sign(e.gross) === Math.sign(e.remaining) ? 0 : 0);
+    const paidShown = Math.max(0, (e.gross > 0 ? e.paidSigned : -e.paidSigned));
+    const creditNote = Math.sign(e.remaining) !== Math.sign(e.gross) && e.gross !== 0 ? ` <span class="credit">(includes overpayment credit)</span>` : "";
+    return `<div class="ride"><div><strong>${esc(nameOf(from))} owes ${esc(nameOf(to))}: <span class="amount">${money(Math.abs(e.remaining))}</span></strong>${creditNote}<br>
+    <span class="muted">From rides: ${money(Math.abs(grossFor))} · Paid so far: ${money(paidShown)} · Remaining: ${money(Math.abs(e.remaining))}</span></div>
+    <div><button class="btn small" data-pay-pair="${from}|${to}|${Math.abs(e.remaining)}">Record payment</button></div></div>`;
+  }).join("") : `<p class="muted">No rides yet, so nobody owes anything.</p>`;
+  document.querySelectorAll("[data-pay-pair]").forEach(b => b.onclick = () => { const [f, t, amt] = b.dataset.payPair.split("|"); $("payFrom").value = f; $("payTo").value = t; $("payAmount").value = (Number(amt) / 100).toFixed(2); $("payDate").value = todayStr(); $("payAmount").focus(); });
+  const totals = state.people.map(p => ({ p, drove: 0, rode: 0, earned: 0, owed: 0, paid: 0, received: 0 }));
+  const T = (id) => totals.find(x => x.p.id === id);
+  for (const r of state.rides) { const d = T(r.driverId); if (d) d.drove++; for (const rid of r.riderIds) { const x = T(rid); if (x) { x.rode++; x.owed += r.rateCents; } if (d) d.earned += r.rateCents; } }
+  for (const pay of state.payments) { const f = T(pay.fromId), t = T(pay.toId); if (f) f.paid += pay.amountCents; if (t) t.received += pay.amountCents; }
+  const pairs = computePairs();
+  $("personTable").innerHTML = `<tr><th>Person</th><th>Drove</th><th>Rode</th><th>Earned</th><th>Owed</th><th>Paid</th><th>Received</th><th>Still owes</th><th>To receive</th><th>Net</th></tr>` +
+    totals.map(x => { let owes = 0, recv = 0; for (const e of pairs) { if (e.remaining > 0) { if (e.low === x.p.id) owes += e.remaining; if (e.high === x.p.id) recv += e.remaining; } else if (e.remaining < 0) { if (e.high === x.p.id) owes += -e.remaining; if (e.low === x.p.id) recv += -e.remaining; } }
+      return `<tr><td>${esc(x.p.name)}</td><td>${x.drove}</td><td>${x.rode}</td><td>${money(x.earned)}</td><td>${money(x.owed)}</td><td>${money(x.paid)}</td><td>${money(x.received)}</td><td>${money(owes)}</td><td>${money(recv)}</td><td>${money(recv - owes)}</td></tr>`; }).join("");
+}
+function renderHistory() {
+  const rides = [...state.rides].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  $("allRides").innerHTML = rides.length ? rides.map(rideRow).join("") : `<p class="muted">No rides logged yet.</p>`; bindRideButtons($("allRides"));
+  const pays = [...state.payments].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  $("allPayments").innerHTML = pays.length ? pays.map(p => `<div class="pay"><div><strong>${esc(nameOf(p.fromId))} paid ${esc(nameOf(p.toId))}: ${money(p.amountCents)}</strong><br><span class="muted">${esc(p.date)}${p.note ? " · " + esc(p.note) : ""}</span></div>
+    <div class="rowflex"><button class="btn ghost small" data-edit-pay="${p.id}">Edit</button><button class="btn danger small" data-del-pay="${p.id}">Delete</button></div></div>`).join("") : `<p class="muted">No payments recorded yet.</p>`;
+  document.querySelectorAll("[data-del-pay]").forEach(b => b.onclick = async () => { if (confirm("Delete this payment? Balances will recalculate.")) { await api.deletePayment(Number(b.dataset.delPay)); await refresh(); } });
+  document.querySelectorAll("[data-edit-pay]").forEach(b => b.onclick = () => { const p = state.payments.find(x => x.id === Number(b.dataset.editPay)); if (!p) return; editingPaymentId = p.id; $("payFrom").innerHTML = state.people.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(""); $("payTo").innerHTML = $("payFrom").innerHTML; $("payFrom").value = p.fromId; $("payTo").value = p.toId; $("payAmount").value = (p.amountCents / 100).toFixed(2); $("payDate").value = p.date; $("payNote").value = p.note || ""; $("payTitle").textContent = "Edit payment"; $("savePay").textContent = "Save changes"; $("cancelEditPay").classList.remove("hidden"); switchTab("balances"); });
+}
+function renderSettings() {
+  $("peopleList").innerHTML = state.people.map(p => `<div class="person"><div class="rowflex" style="flex:1"><input type="text" value="${esc(p.name)}" id="person-name-${p.id}" style="max-width:200px">
+    <label class="check"><input type="checkbox" id="person-drive-${p.id}" ${p.canDrive ? "checked" : ""}> Can drive</label></div>
+    <div class="rowflex"><button class="btn ghost small" data-save-person="${p.id}">Save</button><button class="btn danger small" data-del-person="${p.id}">Remove</button></div></div>`).join("");
+  document.querySelectorAll("[data-save-person]").forEach(b => b.onclick = async () => { const id = Number(b.dataset.savePerson); try { await api.updatePerson(id, { name: $("person-name-" + id).value.trim(), canDrive: $("person-drive-" + id).checked }); await refresh(); notice("Person updated."); } catch (e) { alert(e.message); } });
+  document.querySelectorAll("[data-del-person]").forEach(b => b.onclick = async () => { if (confirm("Remove this person?")) { try { await api.deletePerson(Number(b.dataset.delPerson)); await refresh(); } catch (e) { alert(e.message); } } });
+  $("rateInput").value = (state.settings.rateCents / 100).toFixed(2);
+  $("officeDayChecks").innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<label class="check"><input type="checkbox" class="officeDay" value="${d}" ${state.settings.officeDays.includes(d) ? "checked" : ""}> ${WEEKDAYS_SHORT[d]}</label>`).join("");
+}
+function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab)); ["log", "balances", "history", "settings"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab)); }
+
+/* ================================= events ================================ */
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+$("rideDate").value = todayStr(); $("rideDate").onchange = () => { riderSelectionMemory = []; renderLog(); };
+document.querySelectorAll("#dirPills .pill").forEach(p => p.onclick = () => { selDirection = p.dataset.dir; renderLog(); });
+$("toggleNoDrive").onclick = async () => { const date = selectedDate(); const on = !state.noDriveDays.includes(date); await api.setNoDrive(date, on); await refresh(); };
+$("cancelEditRide").onclick = () => { editingRideId = null; riderSelectionMemory = []; $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); renderLog(); };
+$("saveRide").onclick = async () => {
+  const riderIds = currentRiders().filter(id => id !== selDriverId);
+  if (!selDriverId) return alert("Pick a driver first (someone marked “Can drive”).");
+  if (!riderIds.length) return alert("Pick at least one rider, or mark the day as no-drive.");
+  const body = { date: selectedDate(), direction: selDirection, driverId: selDriverId, riderIds };
+  try { if (editingRideId) await api.updateRide(editingRideId, body); else await api.addRide(body); editingRideId = null; riderSelectionMemory = []; $("logTitle").textContent = "Log a ride"; $("saveRide").textContent = "Save ride"; $("cancelEditRide").classList.add("hidden"); await refresh(); notice("Ride saved."); }
+  catch (e) { alert(e.message); }
+};
+$("savePay").onclick = async () => {
+  const body = { fromId: Number($("payFrom").value), toId: Number($("payTo").value), amountCents: Math.round(Number($("payAmount").value) * 100), date: $("payDate").value || todayStr(), note: $("payNote").value.trim() };
+  if (body.fromId === body.toId) return alert("Who paid and who received must be different people.");
+  if (!body.amountCents || body.amountCents <= 0) return alert("Enter an amount above $0.");
+  try { if (editingPaymentId) await api.updatePayment(editingPaymentId, body); else await api.addPayment(body); editingPaymentId = null; $("payTitle").textContent = "Record a payment"; $("savePay").textContent = "Save payment"; $("cancelEditPay").classList.add("hidden"); $("payAmount").value = ""; $("payNote").value = ""; await refresh(); notice("Payment saved — balances updated."); }
+  catch (e) { alert(e.message); }
+};
+$("cancelEditPay").onclick = () => { editingPaymentId = null; $("payTitle").textContent = "Record a payment"; $("savePay").textContent = "Save payment"; $("cancelEditPay").classList.add("hidden"); };
+$("addPerson").onclick = async () => { const name = $("newPersonName").value.trim(); if (!name) return alert("Enter a name."); try { await api.addPerson({ name, canDrive: $("newPersonDrive").checked }); $("newPersonName").value = ""; $("newPersonDrive").checked = false; await refresh(); } catch (e) { alert(e.message); } };
+$("saveSettings").onclick = async () => { const v = { rateCents: Math.round(Number($("rateInput").value) * 100), officeDays: [...document.querySelectorAll(".officeDay")].filter(c => c.checked).map(c => Number(c.value)) }; if (!(v.rateCents >= 0)) return alert("Enter a valid rate."); try { await api.saveSettings(v); await refresh(); notice("Settings saved."); } catch (e) { alert(e.message); } };
+$("setCode").onclick = async () => { const code = prompt("Group code for this device (must match the GROUP_CODE set on the server; leave blank if none is set):", groupCode()); if (code === null) return; try { localStorage.setItem("carpool-group-code", code.trim()); } catch (e) {} await boot(); };
+
+/* ================================== boot ================================= */
+async function boot() {
+  notice("");
+  if (location.protocol !== "file:") {
+    try {
+      const s = await remoteApi.getState();
+      api = remoteApi; mode = "shared"; state = s;
+      if (selDriverId === null) { const d = state.people.find(p => p.canDrive); selDriverId = d ? d.id : null; }
+      renderAll(); return;
+    } catch (e) {
+      if (/group code/i.test(e.message) && !groupCode()) {
+        const code = prompt("This shared tracker is protected by a group code. Enter it:");
+        if (code) { try { localStorage.setItem("carpool-group-code", code.trim()); } catch (err) {} return boot(); }
+      }
+      console.warn("Falling back to local mode:", e.message);
+      notice("Could not reach the shared /api, so this copy is in local-only mode for now. " + e.message, "warn");
+    }
+  }
+  api = localApi; mode = "local"; await refresh();
+}
+boot();
+</script>
+</body>
+</html>
