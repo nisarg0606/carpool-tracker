@@ -136,6 +136,12 @@
     .badge{font-size:11px;padding:5px 8px}
     .theme-toggle{min-height:36px;padding:7px 10px;font-size:12.5px}
   }
+
+  /* ===== iOS Safari date box: native control ignores width, force it in ===== */
+  input[type="date"]{-webkit-appearance:none;appearance:none;text-align:left;overflow:hidden}
+  input[type="date"]::-webkit-date-and-time-value{text-align:left;min-width:0;margin:0;white-space:nowrap;overflow:hidden}
+  input[type="date"]::-webkit-calendar-picker-indicator{margin-left:auto;flex:none}
+  input[type="date"]::-webkit-inner-spin-button{display:none}
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
     html{scroll-behavior:auto}
