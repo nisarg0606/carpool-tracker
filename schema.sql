@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS no_drive_days (
 -- convenience, not a requirement).
 INSERT OR IGNORE INTO settings (key, value) VALUES ('rate_cents', '500');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('office_days', '[2,3,4]');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('settle', '{"enabled":true,"intervalWeeks":2,"weekday":5,"time":"18:00","anchorDate":null,"lastSettledAt":null}');
 
 -- Starting roster (all editable in the app afterwards).
 INSERT OR IGNORE INTO people (name, can_drive) VALUES ('Nisarg', 1);

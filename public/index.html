@@ -184,6 +184,7 @@
 <header><div class="row"><h1>🚗 Carpool Tracker</h1><div class="head-actions"><span id="modeBadge" class="badge">Connecting…</span><button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle light or dark theme" aria-pressed="false">🌙 Dark</button></div></div></header>
 <main>
   <div id="notice"></div>
+  <div id="settleBanner"></div>
   <nav class="tabs">
     <button data-tab="log" class="active">Log ride</button>
     <button data-tab="balances">Balances</button>
@@ -249,6 +250,17 @@
       <label>Rate per rider, per one-way ride ($)</label><input type="number" id="rateInput" min="0" step="0.01">
       <p class="muted">Changing the rate applies going forward — rides already logged keep the rate they were logged at.</p>
       <label>Usual office days</label><div class="checks" id="officeDayChecks"></div>
+      <h3>Settle-up reminder</h3>
+      <label class="check"><input type="checkbox" id="settleEnabled"> Remind the group to settle up</label>
+      <label>Remind every</label>
+      <div class="rowflex">
+        <input type="number" id="settleWeeks" min="1" max="12" step="1" style="max-width:84px" aria-label="Every how many weeks">
+        <span>week(s) on</span>
+        <select id="settleWeekday" style="max-width:150px" aria-label="Reminder day"></select>
+        <span>at</span>
+        <input type="time" id="settleTime" style="max-width:140px" aria-label="Reminder time">
+      </div>
+      <p class="muted" id="settleNext"></p>
       <div style="margin-top:12px"><button class="btn" id="saveSettings">Save settings</button></div>
       <h3>Sharing</h3><p class="muted" id="shareInfo"></p>
       <button class="btn secondary small" id="setCode">Set / change group code on this device</button>
@@ -345,7 +357,7 @@ async function refresh() {
 function notice(msg, kind) { $("notice").innerHTML = msg ? `<div class="banner ${kind || "info"}">${esc(msg)}</div>` : ""; }
 
 /* ================================ rendering ============================== */
-function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); syncDateDisplays(); }
+function renderAll() { renderMode(); renderLog(); renderBalances(); renderHistory(); renderSettings(); syncDateDisplays(); renderSettleBanner(); }
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const MONTHS_S = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function fmtDateDisplay(v) { if (!v) return "Select a date"; const d = new Date(v + "T12:00:00"); return WEEKDAYS_SHORT[d.getDay()] + ", " + MONTHS_S[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear(); }
@@ -395,6 +407,39 @@ function updateSaveRideBtn() {
     btn.title = dirty ? "" : "No changes yet \u2014 change the driver or riders to enable Update.";
     if (cancel) { cancel.classList.toggle("hidden", !dirty); cancel.title = "Discard your changes and restore the saved ride"; }
   } else { btn.textContent = "Save ride"; btn.disabled = false; btn.title = ""; if (cancel) cancel.classList.add("hidden"); }
+}
+
+/* ============================ settle-up reminder ============================ */
+const SETTLE_DEFAULTS = { enabled: true, intervalWeeks: 2, weekday: 5, time: "18:00", anchorDate: null, lastSettledAt: null };
+function settleCfg() { const s = (state && state.settings && state.settings.settle) || {}; return { ...SETTLE_DEFAULTS, ...s }; }
+function isoLocal(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function nextWeekdayDate(weekday, from) { const b = from ? new Date(from.getFullYear(), from.getMonth(), from.getDate()) : (() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); })(); const add = (weekday - b.getDay() + 7) % 7; b.setDate(b.getDate() + add); return b; }
+function settleDueInfo(cfg, now) {
+  now = now || new Date();
+  const anchorD = cfg.anchorDate ? new Date(cfg.anchorDate + "T12:00:00") : nextWeekdayDate(cfg.weekday);
+  const parts = String(cfg.time || "18:00").split(":"); const hh = Number(parts[0]) || 0, mm = Number(parts[1]) || 0;
+  const anchor = new Date(anchorD.getFullYear(), anchorD.getMonth(), anchorD.getDate(), hh, mm, 0, 0);
+  const stepMs = (cfg.intervalWeeks || 2) * 7 * 24 * 3600 * 1000;
+  const last = cfg.lastSettledAt ? new Date(cfg.lastSettledAt).getTime() : null;
+  let t = anchor.getTime();
+  if (last !== null) { while (t <= last) t += stepMs; }
+  else { while (t + stepMs <= now.getTime()) t += stepMs; }
+  return { due: now.getTime() >= t, dueAt: new Date(t), nextAfter: new Date(t + stepMs) };
+}
+function fmtTime12(d) { let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, "0"); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; return h + ":" + m + " " + ap; }
+function fmtDue(d) { return WEEKDAYS_SHORT[d.getDay()] + ", " + MONTHS_S[d.getMonth()] + " " + d.getDate() + " at " + fmtTime12(d); }
+function renderSettleBanner() {
+  const box = $("settleBanner"); if (!box || !state) return;
+  const cfg = settleCfg();
+  let snoozedUntil = 0; try { snoozedUntil = Number(localStorage.getItem("carpool-settle-snooze") || 0); } catch (e) {}
+  const info = settleDueInfo(cfg);
+  const owed = computePairs().filter(e => e.remaining !== 0);
+  if (!cfg.enabled || !info.due || !owed.length || Date.now() < snoozedUntil) { box.innerHTML = ""; return; }
+  const lines = owed.map(e => { const from = e.remaining > 0 ? e.low : e.high, to = e.remaining > 0 ? e.high : e.low; return `${esc(nameOf(from))} owes ${esc(nameOf(to))}: <strong>${money(Math.abs(e.remaining))}</strong>`; }).join("<br>");
+  box.innerHTML = `<div class="banner warn"><strong>\u{1F4B0} Time to settle up!</strong><br>${lines}<br><span class="muted">Record the payments in the tracker so balances clear.</span><div class="rowflex" style="margin-top:8px"><button class="btn small" id="settleGoPay">Record a payment</button><button class="btn secondary small" id="settleDone">Mark settled up</button><button class="btn ghost small" id="settleSnooze">Remind me tomorrow</button></div></div>`;
+  $("settleGoPay").onclick = () => switchTab("balances");
+  $("settleDone").onclick = async () => { const c = settleCfg(); c.lastSettledAt = new Date().toISOString(); try { await api.saveSettings({ ...state.settings, settle: c }); await refresh(); notice("Settled up \u2014 next reminder " + fmtDue(settleDueInfo(settleCfg()).dueAt) + "."); } catch (e) { alert(e.message); } };
+  $("settleSnooze").onclick = () => { try { localStorage.setItem("carpool-settle-snooze", String(Date.now() + 24 * 3600 * 1000)); } catch (e) {} renderSettleBanner(); };
 }
 
 function renderMode() {
@@ -511,6 +556,14 @@ function renderSettings() {
   document.querySelectorAll("[data-del-person]").forEach(b => b.onclick = async () => { if (confirm("Remove this person?")) { try { await api.deletePerson(Number(b.dataset.delPerson)); await refresh(); } catch (e) { alert(e.message); } } });
   $("rateInput").value = (state.settings.rateCents / 100).toFixed(2);
   $("officeDayChecks").innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<label class="check"><input type="checkbox" class="officeDay" value="${d}" ${state.settings.officeDays.includes(d) ? "checked" : ""}> ${WEEKDAYS_SHORT[d]}</label>`).join("");
+  const scfg = settleCfg();
+  $("settleEnabled").checked = !!scfg.enabled;
+  $("settleWeeks").value = scfg.intervalWeeks;
+  const swd = $("settleWeekday"); if (!swd.options.length) swd.innerHTML = WEEKDAYS.map((w, i) => `<option value="${i}">${w}</option>`).join("");
+  swd.value = String(scfg.weekday);
+  $("settleTime").value = scfg.time || "18:00";
+  const sinfo = settleDueInfo(scfg);
+  $("settleNext").textContent = !scfg.enabled ? "The settle-up reminder is off." : (sinfo.due ? `Settle-up is due (was ${fmtDue(sinfo.dueAt)}). Once marked settled, the next one is ${fmtDue(sinfo.nextAfter)}.` : `Next settle-up: ${fmtDue(sinfo.dueAt)}.`);
 }
 function switchTab(tab) { document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab)); ["log", "balances", "history", "settings"].forEach(t => $("tab-" + t).classList.toggle("hidden", t !== tab)); const el = $("tab-" + tab); if (el) { el.classList.remove("view-enter"); void el.offsetWidth; el.classList.add("view-enter"); } }
 
@@ -539,7 +592,7 @@ $("savePay").onclick = async () => {
 };
 $("cancelEditPay").onclick = () => { editingPaymentId = null; $("payTitle").textContent = "Record a payment"; $("savePay").textContent = "Save payment"; $("cancelEditPay").classList.add("hidden"); };
 $("addPerson").onclick = async () => { const name = $("newPersonName").value.trim(); if (!name) return alert("Enter a name."); try { await api.addPerson({ name, canDrive: $("newPersonDrive").checked }); $("newPersonName").value = ""; $("newPersonDrive").checked = false; await refresh(); } catch (e) { alert(e.message); } };
-$("saveSettings").onclick = async () => { const v = { rateCents: Math.round(Number($("rateInput").value) * 100), officeDays: [...document.querySelectorAll(".officeDay")].filter(c => c.checked).map(c => Number(c.value)) }; if (!(v.rateCents >= 0)) return alert("Enter a valid rate."); try { await api.saveSettings(v); await refresh(); notice("Settings saved."); } catch (e) { alert(e.message); } };
+$("saveSettings").onclick = async () => { const v = { rateCents: Math.round(Number($("rateInput").value) * 100), officeDays: [...document.querySelectorAll(".officeDay")].filter(c => c.checked).map(c => Number(c.value)) }; if (!(v.rateCents >= 0)) return alert("Enter a valid rate."); const prevS = settleCfg(); const swdVal = Number($("settleWeekday").value); const anchorS = (prevS.anchorDate && prevS.weekday === swdVal) ? prevS.anchorDate : isoLocal(nextWeekdayDate(swdVal)); v.settle = { enabled: $("settleEnabled").checked, intervalWeeks: Math.min(12, Math.max(1, Math.round(Number($("settleWeeks").value) || 2))), weekday: swdVal, time: $("settleTime").value || "18:00", anchorDate: anchorS, lastSettledAt: prevS.lastSettledAt }; try { await api.saveSettings(v); await refresh(); notice("Settings saved."); } catch (e) { alert(e.message); } };
 $("setCode").onclick = async () => { const code = prompt("Group code for this device (must match the GROUP_CODE set on the server; leave blank if none is set):", groupCode()); if (code === null) return; try { localStorage.setItem("carpool-group-code", code.trim()); } catch (e) {} await boot(); };
 $("themeToggle").onclick = () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; try { localStorage.setItem(THEME_KEY, next); } catch (e) {} applyTheme(next); };
 initTheme();

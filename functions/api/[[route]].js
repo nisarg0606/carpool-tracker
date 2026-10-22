@@ -29,7 +29,7 @@ const DEFAULT_PEOPLE = [
   { name: "Sai", canDrive: false },
   { name: "Aakash", canDrive: false },
 ];
-const DEFAULT_SETTINGS = { rateCents: 500, officeDays: [2, 3, 4] }; // $5, Tue/Wed/Thu
+const DEFAULT_SETTINGS = { rateCents: 500, officeDays: [2, 3, 4], settle: { enabled: true, intervalWeeks: 2, weekday: 5, time: "18:00", anchorDate: null, lastSettledAt: null } }; // $5, Tue/Wed/Thu; settle-up reminder every 2 weeks, Fri 18:00
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -57,6 +57,22 @@ async function ensureSeeded(db) {
   }
   await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('rate_cents', ?)").bind(String(DEFAULT_SETTINGS.rateCents)).run();
   await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('office_days', ?)").bind(JSON.stringify(DEFAULT_SETTINGS.officeDays)).run();
+  await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('settle', ?)").bind(JSON.stringify(DEFAULT_SETTINGS.settle)).run();
+}
+
+
+function cleanSettle(input, base) {
+  const s = { ...(base || DEFAULT_SETTINGS.settle) };
+  if (input && typeof input === "object") {
+    if (typeof input.enabled === "boolean") s.enabled = input.enabled;
+    if (Number.isInteger(input.intervalWeeks) && input.intervalWeeks >= 1 && input.intervalWeeks <= 12) s.intervalWeeks = input.intervalWeeks;
+    if (Number.isInteger(input.weekday) && input.weekday >= 0 && input.weekday <= 6) s.weekday = input.weekday;
+    if (typeof input.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) s.time = input.time;
+    if (typeof input.anchorDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.anchorDate)) s.anchorDate = input.anchorDate;
+    if (input.lastSettledAt === null) s.lastSettledAt = null;
+    else if (typeof input.lastSettledAt === "string" && !Number.isNaN(Date.parse(input.lastSettledAt))) s.lastSettledAt = input.lastSettledAt;
+  }
+  return s;
 }
 
 async function getSettings(db) {
@@ -66,6 +82,7 @@ async function getSettings(db) {
   return {
     rateCents: Number.isInteger(map.rate_cents) ? map.rate_cents : DEFAULT_SETTINGS.rateCents,
     officeDays: Array.isArray(map.office_days) ? map.office_days : DEFAULT_SETTINGS.officeDays,
+    settle: cleanSettle(map.settle, DEFAULT_SETTINGS.settle),
   };
 }
 
@@ -171,10 +188,12 @@ export async function onRequest(context) {
         const b = await readBody(request); const cur = await getSettings(db);
         const rateCents = Number.isInteger(b.rateCents) ? b.rateCents : (typeof b.rate === "number" ? Math.round(b.rate * 100) : cur.rateCents);
         const officeDays = Array.isArray(b.officeDays) ? b.officeDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : cur.officeDays;
+        const settle = b.settle !== undefined ? cleanSettle(b.settle, cur.settle) : cur.settle;
         if (rateCents < 0) return fail("Rate cannot be negative.");
         await db.batch([
           db.prepare("INSERT INTO settings (key, value) VALUES ('rate_cents', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(String(rateCents)),
           db.prepare("INSERT INTO settings (key, value) VALUES ('office_days', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(JSON.stringify(officeDays)),
+          db.prepare("INSERT INTO settings (key, value) VALUES ('settle', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(JSON.stringify(settle)),
         ]);
         return json(await getSettings(db));
       }
